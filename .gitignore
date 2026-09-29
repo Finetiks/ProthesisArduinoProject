@@ -23,3 +23,6 @@ desktop.ini
 # Local secrets / lab notes not for the repo
 *.local
 scratch/
+
+# Локальні налаштування агента/редактора
+.claude/settings.local.json
