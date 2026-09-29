@@ -1,0 +1,18 @@
+# Прошивку тримаємо з LF у репозиторії: Arduino IDE, arduino-cli та avr-gcc
+# однаково працюють з LF на всіх системах, а змішані перенесення дають
+# нечитабельні diff-и там, де насправді змінився один рядок.
+* text=auto eol=lf
+
+*.ino  text eol=lf
+*.h    text eol=lf
+*.cpp  text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+
+# Бінарні файли апаратної частини
+*.stl  binary
+*.step binary
+*.f3d  binary
+*.png  binary
+*.jpg  binary
+*.pdf  binary
