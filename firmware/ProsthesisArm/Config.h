@@ -1,0 +1,149 @@
+#pragma once
+/*
+ * Config.h — єдине місце, де описано «фізику» конкретного екземпляра протеза:
+ * піни, межі руху серво, константи EMG-тракту та живлення.
+ *
+ * Правило проєкту: жоден інший файл не містить «магічних» номерів пінів.
+ * Таблиця пінів синхронізована з docs/hardware.md.
+ *
+ * Платформа: Arduino Nano (ATmega328P, 16 МГц, 5 В, 2 КБ RAM).
+ */
+
+#include <Arduino.h>
+
+// ---------------------------------------------------------------------------
+// Піни
+// ---------------------------------------------------------------------------
+
+/** Серво пальців, у порядку enum Finger: великий → мізинець. */
+constexpr uint8_t PIN_SERVO[5] = { 3, 4, 5, 6, 7 };
+
+constexpr uint8_t PIN_JOY_X      = A1;
+constexpr uint8_t PIN_JOY_Y      = A2;
+constexpr uint8_t PIN_JOY_BUTTON = 2;   // на GND при натисканні, INPUT_PULLUP
+
+constexpr uint8_t PIN_EMG_1      = A0;  // envelope-вихід, згинач кисті
+constexpr uint8_t PIN_BATTERY    = A3;  // через дільник 100k/47k
+
+constexpr uint8_t PIN_BUZZER     = 8;   // тактильний/звуковий фідбек
+
+// Резерв, поки не задіяний: D9 — серво зап'ястка, A6 — EMG канал 2.
+constexpr uint8_t PIN_SERVO_WRIST_RESERVED = 9;
+constexpr uint8_t PIN_EMG_2_RESERVED       = A6;
+
+// OLED сидить на апаратному I2C (A4=SDA, A5=SCL) — піни задає бібліотека Wire.
+
+// ---------------------------------------------------------------------------
+// Пальці та механіка
+// ---------------------------------------------------------------------------
+
+enum Finger : uint8_t {
+  FINGER_THUMB = 0,
+  FINGER_INDEX,
+  FINGER_MIDDLE,
+  FINGER_RING,
+  FINGER_PINKY,
+  FINGER_COUNT
+};
+
+/*
+ * Положення пальця в коді завжди виражене у відсотках стиску:
+ *   0   = палець повністю розкритий,
+ *   100 = палець повністю зігнутий.
+ * Перетворення у мікросекунди імпульсу робить модуль Hand за калібруванням,
+ * тому напрямок обертання й межі кожного серво налаштовуються окремо.
+ */
+constexpr uint8_t CLOSURE_OPEN = 0;
+constexpr uint8_t CLOSURE_FULL = 100;
+
+/** Заводські межі імпульсу серво (мкс) на 0 % і 100 % стиску. */
+constexpr uint16_t SERVO_DEFAULT_US_OPEN[FINGER_COUNT]   = { 1000, 1000, 1000, 1000, 1000 };
+constexpr uint16_t SERVO_DEFAULT_US_CLOSED[FINGER_COUNT] = { 2000, 2000, 2000, 2000, 2000 };
+
+/** Абсолютні межі, за які калібрування не пускаємо — захист механіки. */
+constexpr uint16_t SERVO_US_ABS_MIN = 700;
+constexpr uint16_t SERVO_US_ABS_MAX = 2300;
+
+/** Обмеження швидкості: максимум відсотків стиску за секунду. */
+constexpr uint8_t SERVO_MAX_SPEED_PCT_PER_S = 180;
+
+/** Крок оновлення позицій серво, мс (≈55 Гц — узгоджено з періодом PWM серво). */
+constexpr uint8_t SERVO_UPDATE_INTERVAL_MS = 18;
+
+/**
+ * Скільки часу палець має стояти нерухомо, перш ніж серво відключиться (detach).
+ * Знеструмлене серво не гріється й не свистить у статичному хваті.
+ */
+constexpr uint16_t SERVO_IDLE_RELEASE_MS = 1500;
+
+// ---------------------------------------------------------------------------
+// EMG
+// ---------------------------------------------------------------------------
+
+constexpr uint8_t  EMG_SAMPLE_INTERVAL_MS = 5;   // 200 Гц; огинаюча повільна, цього досить
+constexpr uint8_t  EMG_WINDOW             = 16;  // ковзне середнє ≈80 мс
+constexpr uint16_t EMG_SCALE              = 1000; // активація нормується у 0..1000
+
+/** Пороги активації у частках від максимального скорочення (MVC), проміле. */
+constexpr uint16_t EMG_THRESHOLD_ON  = 250; // 25 % — рух почався
+constexpr uint16_t EMG_THRESHOLD_OFF = 150; // 15 % — гістерезис, рух завершився
+
+/** Вікно для розпізнавання подвійного скорочення («подвійний клік» м'язом). */
+constexpr uint16_t EMG_DOUBLE_WINDOW_MS = 600;
+constexpr uint16_t EMG_PULSE_MIN_MS     = 40;  // коротше — це артефакт, не намір
+constexpr uint16_t EMG_PULSE_MAX_MS     = 400; // довше — це утримання, не клік
+
+/** Утримання сильного скорочення для фіксації/розблокування хвату. */
+constexpr uint16_t EMG_HOLD_LOCK_MS = 1200;
+
+/** Якщо MVC майже дорівнює рівню спокою — калібрування невалідне. */
+constexpr uint16_t EMG_MIN_USEFUL_SPAN = 40; // в одиницях ADC
+
+// ---------------------------------------------------------------------------
+// Джойстик
+// ---------------------------------------------------------------------------
+
+constexpr uint8_t  JOY_SAMPLE_INTERVAL_MS = 20;
+constexpr uint16_t JOY_DEADZONE           = 160;  // від центру, в одиницях ADC
+constexpr uint16_t JOY_REPEAT_FIRST_MS    = 450;  // затримка до автоповтору
+constexpr uint16_t JOY_REPEAT_NEXT_MS     = 160;
+constexpr uint16_t JOY_LONG_PRESS_MS      = 700;
+constexpr uint8_t  JOY_DEBOUNCE_MS        = 30;
+
+// ---------------------------------------------------------------------------
+// Батарея
+// ---------------------------------------------------------------------------
+
+constexpr uint16_t BATTERY_SAMPLE_INTERVAL_MS = 500;
+
+/** Дільник R1=100к / R2=47к → множник (R1+R2)/R2, збережений як ×1000. */
+constexpr uint16_t BATTERY_DIVIDER_X1000 = 3128;
+
+constexpr uint16_t BATTERY_FULL_MV     = 8400; // 2S Li-ion, 4.20 В/елемент
+constexpr uint16_t BATTERY_EMPTY_MV    = 6400; // 3.20 В/елемент
+constexpr uint16_t BATTERY_WARN_MV     = 6800; // попередження на екрані
+constexpr uint16_t BATTERY_CUTOFF_MV   = 6200; // рух серво заблокований
+
+// ---------------------------------------------------------------------------
+// Інтерфейс
+// ---------------------------------------------------------------------------
+
+constexpr uint8_t  UI_FRAME_INTERVAL_MS  = 60;   // ≈16 к/с, вистачає для OLED
+constexpr uint16_t UI_MENU_TIMEOUT_MS    = 15000; // авто-повернення на головний екран
+constexpr uint8_t  OLED_I2C_ADDRESS      = 0x3C;
+
+// ---------------------------------------------------------------------------
+// Збереження профілю
+// ---------------------------------------------------------------------------
+
+constexpr uint16_t EEPROM_PROFILE_ADDR = 0;
+constexpr uint32_t PROFILE_MAGIC       = 0x50524F53UL; // 'PROS'
+constexpr uint8_t  PROFILE_VERSION     = 1;
+
+// ---------------------------------------------------------------------------
+// Діагностика
+// ---------------------------------------------------------------------------
+
+/** Розкоментувати, щоб вести телеметрію EMG у Serial (плоттер Arduino IDE). */
+// #define PROSTHESIS_DEBUG_SERIAL 1
+constexpr uint32_t SERIAL_BAUD = 115200;
