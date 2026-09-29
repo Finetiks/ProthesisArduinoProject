@@ -41,7 +41,10 @@ public:
   /** Обробити події джойстика. Викликати до update(). */
   void handleEvents(uint8_t joyEvents, uint32_t now);
 
-  /** Перемалювати екран, якщо настав час кадру. */
+  /**
+   * Просунути малювання екрана. Один виклик відправляє не більше однієї
+   * сторінки по I2C, тому цикл керування ніколи не стоїть надовго.
+   */
   void update(uint32_t now);
 
   /** Показати коротке повідомлення поверх поточного екрана. */
@@ -98,6 +101,7 @@ private:
   bool itemIsEditable(uint8_t item) const;
 
   // --- Малювання ---
+  void drawCurrentScreen();
   void drawHome();
   void drawMenu();
   void drawCalibEmg();
@@ -126,6 +130,9 @@ private:
   Screen   screen_ = SCREEN_HOME;
   uint32_t lastFrameMs_ = 0;
   uint32_t lastInputMs_ = 0;
+
+  /** Чи йде зараз посторінкова відправка кадру. */
+  bool rendering_ = false;
 
   // Меню. Окремого режиму редагування немає: вгору/вниз ходять по пунктах,
   // вліво/вправо одразу змінюють значення вибраного. На один рівень менше

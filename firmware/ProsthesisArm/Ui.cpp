@@ -53,6 +53,9 @@ void Ui::begin(Profile& profile, Controller& controller, Emg& emg,
   battery_    = &battery;
   joystick_   = &joystick;
 
+  // 400 кГц обов'язково: на стандартних 100 кГц один кадр 128x64 займав би
+  // ~92 мс на шині, і цикл керування стояв би більшу частину часу.
+  display_.setBusClock(400000);
   display_.begin();
   display_.setI2CAddress(OLED_I2C_ADDRESS << 1); // U8g2 чекає адресу, зсунуту на 1 біт
   display_.enableUTF8Print();
@@ -378,26 +381,50 @@ void Ui::update(uint32_t now) {
     enterScreen(SCREEN_HOME, now);
   }
 
-  if ((uint32_t)(now - lastFrameMs_) < UI_FRAME_INTERVAL_MS) {
+  /*
+   * Кадр відправляється посторінково, по одній сторінці на виклик.
+   *
+   * Класичний `firstPage(); do { ... } while (nextPage());` відправив би всі
+   * 1024 байти одним блоком — це ~23 мс на шині 400 кГц, під час яких не
+   * читається EMG і не оновлюються серво. Для протеза така пауза в циклі
+   * керування неприйнятна, тому кадр розтягнутий на вісім ітерацій по ~3 мс.
+   *
+   * Плата за це — можливий розрив картинки: якщо стан зміниться між
+   * сторінками, верх і низ екрана покажуть різні моменти. Для смуг і цифр це
+   * непомітно, а для протеза важливіший рівний цикл керування.
+   */
+  if (!rendering_) {
+    if ((uint32_t)(now - lastFrameMs_) < UI_FRAME_INTERVAL_MS) {
+      return;
+    }
+    lastFrameMs_ = now;
+
+    if (toastText_ != nullptr && (int32_t)(now - toastUntilMs_) >= 0) {
+      toastText_ = nullptr;
+    }
+
+    display_.firstPage();
+    drawCurrentScreen();
+    rendering_ = true;
     return;
   }
-  lastFrameMs_ = now;
 
-  if (toastText_ != nullptr && (int32_t)(now - toastUntilMs_) >= 0) {
-    toastText_ = nullptr;
+  if (display_.nextPage()) {
+    drawCurrentScreen();
+  } else {
+    rendering_ = false;
   }
+}
 
-  display_.firstPage();
-  do {
-    switch (screen_) {
-      case SCREEN_HOME:        drawHome(); break;
-      case SCREEN_MENU:        drawMenu(); break;
-      case SCREEN_CALIB_EMG:   drawCalibEmg(); break;
-      case SCREEN_CALIB_SERVO: drawCalibServo(); break;
-      case SCREEN_DIAGNOSTICS: drawDiagnostics(); break;
-    }
-    drawToast();
-  } while (display_.nextPage());
+void Ui::drawCurrentScreen() {
+  switch (screen_) {
+    case SCREEN_HOME:        drawHome(); break;
+    case SCREEN_MENU:        drawMenu(); break;
+    case SCREEN_CALIB_EMG:   drawCalibEmg(); break;
+    case SCREEN_CALIB_SERVO: drawCalibServo(); break;
+    case SCREEN_DIAGNOSTICS: drawDiagnostics(); break;
+  }
+  drawToast();
 }
 
 void Ui::drawBar(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t value, uint16_t max) {
