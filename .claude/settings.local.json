@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Force \"C:\\\\Users\\\\Vitalii Kharchenko\\\\Desktop\\\\prosthesisBioProject\" | Select-Object Mode,Length,Name; git --version; \\(Get-Command arduino-cli -ErrorAction SilentlyContinue\\).Source)"
+    ]
+  }
+}
