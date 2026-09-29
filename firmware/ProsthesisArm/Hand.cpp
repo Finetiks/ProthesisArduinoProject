@@ -130,6 +130,37 @@ void Hand::releasePower() {
   detachAll();
 }
 
+void Hand::writeRawMicros(uint8_t finger, uint16_t microseconds) {
+  if (finger >= FINGER_COUNT) {
+    return;
+  }
+  if (!attached_) {
+    attachAll();
+  }
+
+  servo_[finger].writeMicroseconds(clampMicros((int32_t)microseconds));
+
+  // Після калібрування логічна позиція пальця вже не відповідає дійсності:
+  // синхронізуємо її, інакше перший же рух у роботі почався б зі стрибка.
+  const int32_t openUs   = (int32_t)profile_->servoOpenUs[finger];
+  const int32_t closedUs = (int32_t)profile_->servoClosedUs[finger];
+  const int32_t span     = closedUs - openUs;
+
+  int32_t centi = 0;
+  if (span != 0) {
+    centi = (((int32_t)microseconds - openUs) * (int32_t)CENTI_FULL) / span;
+  }
+  if (centi < 0) {
+    centi = 0;
+  } else if (centi > (int32_t)CENTI_FULL) {
+    centi = CENTI_FULL;
+  }
+
+  positionCenti_[finger] = (uint16_t)centi;
+  targetCenti_[finger]   = (uint16_t)centi;
+  lastMotionMs_          = millis();
+}
+
 uint8_t Hand::target(uint8_t finger) const {
   return finger < FINGER_COUNT ? (uint8_t)(targetCenti_[finger] / 100) : 0;
 }

@@ -45,6 +45,13 @@ public:
   /** Негайно знеструмити всі серво. Кисть стане податливою. */
   void releasePower();
 
+  /**
+   * Прямий запис ширини імпульсу — тільки для екрана калібрування серво,
+   * де потрібно бачити реальне положення пальця під час підбору меж.
+   * В обхід обмеження швидкості, тому в звичайній роботі не використовується.
+   */
+  void writeRawMicros(uint8_t finger, uint16_t microseconds);
+
   uint8_t target(uint8_t finger) const;
   uint8_t position(uint8_t finger) const;
 
